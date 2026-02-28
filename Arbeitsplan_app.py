@@ -310,4 +310,58 @@ with tab3:
             with st.expander(f"{m['name']} ({m['id']})"):
                 col_del, col_edit = st.columns([1, 5])
                 with col_del:
-                    if
+                    if st.button("🗑️ Löschen", key=f"del_m_{idx}", type="primary"):
+                        del mitarbeiter[idx]
+                        st.success("Mitarbeiter gelöscht!")
+                        st.rerun()
+
+                with col_edit:
+                    edit_vor = st.text_input("Vorname", value=m["name"].split()[0] if " " in m["name"] else m["name"], key=f"evn_{idx}")
+                    edit_nach = st.text_input("Nachname", value=" ".join(m["name"].split()[1:]) if " " in m["name"] else "", key=f"enn_{idx}")
+                    edit_erf_text = st.selectbox(
+                        "Erfahrung",
+                        options=[
+                            "Eventleiter (kann leiten + unerfahrene mitnehmen)",
+                            "Kann alleine ein Event leiten",
+                            "Nur als Hilfskraft (keine Verantwortung)"
+                        ],
+                        index=3 - m["erfahrung_level"],
+                        key=f"eerf_{idx}"
+                    )
+                    edit_erf_level = erf_level_map[edit_erf_text]
+
+                    edit_fs = st.multiselect("Führerscheine", options=["Klasse B", "Klasse BE"], default=m["fuehrerscheine"], key=f"efs_{idx}")
+
+                    if st.button("Änderungen speichern", key=f"save_m_{idx}"):
+                        m["name"] = f"{edit_vor.strip()} {edit_nach.strip()}".strip()
+                        m["erfahrung_level"] = edit_erf_level
+                        m["fuehrerscheine"] = ["B" if "B" in edit_fs else "BE" if "BE" in edit_fs else []]
+                        st.success("Gespeichert!")
+                        st.rerun()
+
+    # Verfügbarkeit
+    st.subheader("Verfügbarkeit eintragen")
+    if mitarbeiter:
+        selected = st.selectbox("Mitarbeiter auswählen", options=[m["name"] for m in mitarbeiter])
+        m = next(m for m in mitarbeiter if m["name"] == selected)
+
+        st.write(f"**Aktuelle Tage für {m['name']}:** {', '.join(sorted(m['verfuegbare_termine'])) or 'Keine'}")
+
+        neue_tage = st.date_input("Neue Tage hinzufügen", value=[], min_value=datetime(2024,1,1), max_value=datetime(2026,12,31), format="YYYY-MM-DD")
+
+        if st.button("Tage hinzufügen"):
+            if isinstance(neue_tage, datetime):
+                neue_tage = [neue_tage]
+            neue_str = [t.strftime("%Y-%m-%d") for t in neue_tage]
+            m["verfuegbare_termine"] = sorted(set(m["verfuegbare_termine"] + neue_str))
+            st.success("Tage hinzugefügt!")
+            st.rerun()
+
+        if m["verfuegbare_termine"]:
+            to_del = st.multiselect("Tage entfernen", options=m["verfuegbare_termine"])
+            if st.button("Ausgewählte Tage löschen"):
+                m["verfuegbare_termine"] = [d for d in m["verfuegbare_termine"] if d not in to_del]
+                st.success("Tage entfernt!")
+                st.rerun()
+    else:
+        st.info("Zuerst einen Mitarbeiter anlegen.")
