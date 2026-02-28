@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 from typing import List, Dict, Tuple, Optional
 
 # ──────────────────────────────
-# Session State (damit Änderungen erhalten bleiben)
+# Session State Initialisierung
 # ──────────────────────────────
 if "events" not in st.session_state:
     st.session_state.events = [
@@ -39,8 +39,8 @@ if "mitarbeiter" not in st.session_state:
         }
     ]
 
-events = st.session_state.events
-mitarbeiter = st.session_state.mitarbeiter
+events: List[Dict] = st.session_state.events
+mitarbeiter: List[Dict] = st.session_state.mitarbeiter
 
 # ──────────────────────────────
 # Hilfsfunktionen
@@ -109,7 +109,9 @@ st.title("🚀 Arbeitsplan erstellen")
 
 tab1, tab2, tab3 = st.tabs(["📅 Planung", "➕ Events verwalten", "👤 Mitarbeiter verwalten"])
 
-# ====================== TAB 1: PLANUNG ======================
+# ────────────────────────────────────────────────
+# TAB 1: PLANUNG
+# ────────────────────────────────────────────────
 with tab1:
     st.subheader("Bestehende Events planen")
 
@@ -130,7 +132,10 @@ with tab1:
                 )
 
                 assigned, error = assign_to_event(
-                    candidates, event["required_fuehrerscheine"], effective_required, event["needs_leiter"]
+                    candidates,
+                    event["required_fuehrerscheine"],
+                    effective_required,
+                    event["needs_leiter"]
                 )
 
                 if error:
@@ -154,7 +159,9 @@ with tab1:
                     else:
                         st.error(f"FEHLER: {p.get('grund', 'Unbekannt')}")
 
-# ====================== TAB 2: EVENTS VERWALTEN ======================
+# ────────────────────────────────────────────────
+# TAB 2: EVENTS VERWALTEN
+# ────────────────────────────────────────────────
 with tab2:
     st.subheader("➕ Neues Event anlegen")
 
@@ -219,10 +226,9 @@ with tab2:
                 st.success(f"Event '{event_name}' wurde hinzugefügt!")
                 st.balloons()
 
-    # Liste + Bearbeiten/Löschen
     st.subheader("📋 Alle Events")
     if not events:
-        st.info("Noch keine Events vorhanden.")
+        st.info("Noch keine Events vorhanden. Füge oben eines hinzu.")
     else:
         for idx, ev in enumerate(events):
             with st.expander(f"{ev['name']} – {ev['required_dates']} ({ev['ort']}) | P{ev['prioritaet']}"):
@@ -254,7 +260,9 @@ with tab2:
                         st.success("Event gelöscht!")
                         st.rerun()
 
-# ====================== TAB 3: MITARBEITER VERWALTEN ======================
+# ────────────────────────────────────────────────
+# TAB 3: MITARBEITER VERWALTEN
+# ────────────────────────────────────────────────
 with tab3:
     st.subheader("👤 Mitarbeiter verwalten")
 
@@ -284,7 +292,11 @@ with tab3:
                 }
                 erfahrung_level = erf_level_map[erfahrung_text]
 
-            fuehrerschein = st.multiselect("Führerscheinklassen", options=["Klasse B", "Klasse BE"], default=[])
+            fuehrerschein_labels = st.multiselect(
+                "Führerscheinklassen",
+                options=["Klasse B", "Klasse BE"],
+                default=[]
+            )
 
             submitted_m = st.form_submit_button("Mitarbeiter speichern", type="primary")
 
@@ -292,10 +304,16 @@ with tab3:
                 if not name:
                     st.error("Vor- und Nachname erforderlich")
                 else:
+                    fs_codes = []
+                    if "Klasse B" in fuehrerschein_labels:
+                        fs_codes.append("B")
+                    if "Klasse BE" in fuehrerschein_labels:
+                        fs_codes.append("BE")
+
                     neuer_m = {
                         "id": f"m{len(mitarbeiter)+1}",
                         "name": name,
-                        "fuehrerscheine": ["B" if "B" in fuehrerschein else "BE" if "BE" in fuehrerschein else []],
+                        "fuehrerscheine": fs_codes,
                         "erfahrung_level": erfahrung_level,
                         "verfuegbare_termine": []
                     }
@@ -316,43 +334,56 @@ with tab3:
                         st.rerun()
 
                 with col_edit:
-                    edit_vor = st.text_input("Vorname", value=m["name"].split()[0] if " " in m["name"] else m["name"], key=f"evn_{idx}")
-                    edit_nach = st.text_input("Nachname", value=" ".join(m["name"].split()[1:]) if " " in m["name"] else "", key=f"enn_{idx}")
+                    name_parts = m["name"].split(" ", 1)
+                    edit_vor = st.text_input("Vorname", value=name_parts[0], key=f"evn_{idx}")
+                    edit_nach = st.text_input("Nachname", value=name_parts[1] if len(name_parts) > 1 else "", key=f"enn_{idx}")
+
+                    erf_text_map = {
+                        3: "Eventleiter (kann leiten + unerfahrene mitnehmen)",
+                        2: "Kann alleine ein Event leiten",
+                        1: "Nur als Hilfskraft (keine Verantwortung)"
+                    }
                     edit_erf_text = st.selectbox(
                         "Erfahrung",
-                        options=[
-                            "Eventleiter (kann leiten + unerfahrene mitnehmen)",
-                            "Kann alleine ein Event leiten",
-                            "Nur als Hilfskraft (keine Verantwortung)"
-                        ],
-                        index=3 - m["erfahrung_level"],
+                        options=list(erf_text_map.values()),
+                        index=list(erf_text_map.keys()).index(m["erfahrung_level"]),
                         key=f"eerf_{idx}"
                     )
-                    edit_erf_level = erf_level_map[edit_erf_text]
+                    edit_erf_level = [k for k, v in erf_text_map.items() if v == edit_erf_text][0]
 
-                    edit_fs = st.multiselect("Führerscheine", options=["Klasse B", "Klasse BE"], default=m["fuehrerscheine"], key=f"efs_{idx}")
+                    edit_fs_labels = st.multiselect(
+                        "Führerscheine",
+                        options=["Klasse B", "Klasse BE"],
+                        default=["Klasse B" if "B" in m["fuehrerscheine"] else None,
+                                 "Klasse BE" if "BE" in m["fuehrerscheine"] else None],
+                        key=f"efs_{idx}"
+                    )
 
                     if st.button("Änderungen speichern", key=f"save_m_{idx}"):
                         m["name"] = f"{edit_vor.strip()} {edit_nach.strip()}".strip()
                         m["erfahrung_level"] = edit_erf_level
-                        m["fuehrerscheine"] = ["B" if "B" in edit_fs else "BE" if "BE" in edit_fs else []]
+                        m["fuehrerscheine"] = []
+                        if "Klasse B" in edit_fs_labels:
+                            m["fuehrerscheine"].append("B")
+                        if "Klasse BE" in edit_fs_labels:
+                            m["fuehrerscheine"].append("BE")
                         st.success("Gespeichert!")
                         st.rerun()
 
     # Verfügbarkeit
     st.subheader("Verfügbarkeit eintragen")
     if mitarbeiter:
-        selected = st.selectbox("Mitarbeiter auswählen", options=[m["name"] for m in mitarbeiter])
-        m = next(m for m in mitarbeiter if m["name"] == selected)
+        selected_name = st.selectbox("Mitarbeiter auswählen", [m["name"] for m in mitarbeiter])
+        m = next(m for m in mitarbeiter if m["name"] == selected_name)
 
         st.write(f"**Aktuelle Tage für {m['name']}:** {', '.join(sorted(m['verfuegbare_termine'])) or 'Keine'}")
 
-        neue_tage = st.date_input("Neue Tage hinzufügen", value=[], min_value=datetime(2024,1,1), max_value=datetime(2026,12,31), format="YYYY-MM-DD")
+        neue_tage = st.date_input("Neue Tage hinzufügen", value=[], min_value=datetime(2024, 1, 1), max_value=datetime(2026, 12, 31), format="YYYY-MM-DD")
 
         if st.button("Tage hinzufügen"):
             if isinstance(neue_tage, datetime):
                 neue_tage = [neue_tage]
-            neue_str = [t.strftime("%Y-%m-%d") for t in neue_tage]
+            neue_str = [t.strftime("%Y-%m-%d") for t in neue_tage if t]
             m["verfuegbare_termine"] = sorted(set(m["verfuegbare_termine"] + neue_str))
             st.success("Tage hinzugefügt!")
             st.rerun()
